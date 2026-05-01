@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#000000">
+<title>簡英輸入法</title>
+<style>
+  :root {
+    --bg:#000; --cn:#00FFFF; --en:#FFFF00; --ok:#00FF00;
+    --err:#FF4444; --tip:#888; --red:#CC2200; --exp:#AAFFAA;
+    --kb-bg:#2a2a2a; --kb-fg:#fff; --kb-hi:#FFFF00;
+    --kb-hi-fg:#000; --kb-done:#444; --kb-border:#555;
+    --blue:#0055FF;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{background:var(--bg);color:var(--cn);font-family:'Courier New',monospace;min-height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+  #app{display:flex;flex-direction:column;height:100vh;padding:4px 8px;gap:2px;}
+  #title{text-align:right;color:var(--cn);font-size:clamp(12px,2.5vw,20px);font-weight:bold;letter-spacing:2px;flex-shrink:0;}
+  #rows{flex-shrink:0;font-size:clamp(12px,2.2vw,18px);line-height:1.4;}
+  .row{display:flex;flex-wrap:nowrap;min-height:1.4em;}
+  .cell{display:inline-flex;align-items:center;min-width:2.8em;padding:0 2px;}
+  #row1 .cell{color:var(--cn);}
+  #row2 .cell{color:var(--ok);}
+  #row3 .cell{color:var(--en);font-size:.85em;}
+  #row4 .cell{color:var(--en);font-size:.85em;}
+  .cell.active-code{border:2px solid var(--en);border-radius:3px;}
+  #inp-row{display:flex;flex-wrap:nowrap;background:#111;padding:3px 4px;border-radius:4px;min-height:1.6em;font-size:clamp(11px,2vw,16px);flex-shrink:0;}
+  .inp-cell{min-width:2.8em;color:var(--tip);padding:0 2px;}
+  .inp-cell.current{color:#fff;border:2px solid var(--en);border-radius:3px;background:#001133;}
+  #msg{font-size:clamp(10px,1.8vw,14px);min-height:1.2em;flex-shrink:0;}
+  #exp{font-size:clamp(9px,1.5vw,13px);color:var(--exp);flex-shrink:0;display:none;overflow:hidden;}
+  #exp-line{border-top:3px solid var(--red);margin:2px 0;}
+  #exp-title{color:var(--tip);margin-bottom:1px;}
+  #keyboard{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;padding-bottom:2px;}
+  .kb-row{display:flex;gap:2px;width:100%;}
+  .kb-key{flex:1;min-width:0;background:var(--kb-bg);color:var(--kb-fg);border:1px solid var(--kb-border);border-radius:4px;font-family:'Courier New',monospace;font-size:clamp(9px,1.6vw,13px);font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative;aspect-ratio:1;user-select:none;-webkit-user-select:none;transition:background .05s;}
+  .kb-key.space-key{aspect-ratio:unset;flex:5;min-height:32px;}
+  .kb-key.fj-key::after{content:'';position:absolute;bottom:3px;left:20%;width:60%;height:2px;background:var(--en);border-radius:1px;}
+  .kb-key.highlighted{background:var(--kb-hi);color:var(--kb-hi-fg);border:2px solid var(--blue);}
+  .kb-key.blinking-on{background:var(--kb-hi);color:var(--kb-hi-fg);border:2px solid var(--blue);}
+  .kb-key.blinking-off{background:#000033;color:var(--en);border:2px solid var(--blue);}
+  .kb-key.flashing{background:var(--red);color:#fff;border:2px solid var(--red);}
+  .kb-key.done{background:var(--kb-done);color:#888;border-color:#666;}
+  .key-num{position:absolute;top:1px;left:3px;font-size:.6em;color:var(--red);font-weight:bold;line-height:1;}
+  #bottom{display:flex;justify-content:space-between;font-size:clamp(9px,1.5vw,12px);color:var(--tip);flex-shrink:0;padding:2px 0;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="title">英打直接出字</div>
+  <div id="rows">
+    <div class="row" id="row1"></div>
+    <div class="row" id="row2"></div>
+    <div class="row" id="row3"></div>
+    <div class="row" id="row4"></div>
+  </div>
+  <div id="inp-row"></div>
+  <div id="msg"></div>
+  <div id="exp">
+    <div id="exp-line"></div>
+    <div id="exp-title">─ 碼表說明 ─</div>
+    <div id="exp-body"></div>
+  </div>
+  <div id="keyboard"></div>
+  <div id="bottom">
+    <span id="sent-label"></span>
+    <span id="ver">ver 1150501_15</span>
+  </div>
+</div>
+<script>
+// ── 資料（由 demo.txt 產生）──
+const RAW_SENTENCES = ["張仙妮，生日快樂", "你我他，心想事成", "聽說讀寫；終生有夢", "上下左右。開關高低", "英語教學，通用可行"];
+const CODE_TABLE    = {"；": [";", "分號"], "，": [",", "豆號"], "。": [".", "句號"], "張": ["ul", "弓u型弓+長ln"], "仙": ["yw", "人y+山w"], "妮": ["gp7", "女g+尸p+七7"], "心": ["hea", "HEArt心"], "想": ["th", "THink想"], "事": ["ma", "MAter事"], "成": ["ad", "ADut成人"], "宸": ["cvg", "寶C+V型+女g"], "祐": ["2ri", "示2+右ri"], "愛": ["lv", "LoVe愛"], "妳": ["gu", "女生的你_GU"], "林": ["tt", "木t+木t,雙木林"], "永": [",w", "，豆+水Water"], "曄": ["d50", "日Dat+5個十_50"], "窗": ["wd", "WinDow窗戶"], "外": ["os", "OutSide"], "藍": ["blu", "BLUe"], "天": ["sk", "SKy"], "蔣": ["0nm", "十0+片n+月o"], "立": ["im", "IMmediately立即"], "德": ["ge", "GErmany德國"], "廖": ["v53", "V型+羽5型+三3型"], "仕": ["ylz", "人Y + Lz(土L之錯體)"], "強": ["ub", "U型弓+虫B"], "黃": ["yel", "YELoow"], "子": ["so", "SOn子"], "涵": ["3vw", "三點水3+V型+水w"], "王": ["ki", "KIng"], "蘭": ["0dt", "十0+門Door+木t"], "花": ["fw", "FoWelly"], "傅": ["y0i", "人y+十0+寸inch"], "亞": ["as", "ASia亞洲"], "龍": ["il", "立i+L型"], "蕙": ["00h", "十0+惠_0h"], "雯": ["rax", "雨ra + X型"], "玉": ["5.", "王5+點."], "敏": ["evx", "每EVey+x型"], "榆": ["tak", "木t+A型+刀k"], "靜": ["1mj", "1型+月m+J型"], "你": ["u", "yoU你"], "我": ["i", "I我"], "他": ["he", "HE他"], "生": ["lf", "LiFe生活的生"], "日": ["d", "Day日"], "快": ["fs", "FaSt快"], "樂": ["mu", "MUsic音樂的樂"], "聽": ["ls", "LiSten聽"], "說": ["sa", "SAy說"], "讀": ["rea", "REAd讀"], "寫": ["wr", "WRite寫"], "終": ["end", "END終"], "有": ["v", "haVe有"], "夢": ["dre", "DREam夢"], "上": ["up", "up上"], "下": ["dn", "DowN下"], "左": ["le", "LEft左"], "右": ["ri", "RIght右"], "開": ["on", "ON開"], "關": ["of", "OFf關"], "高": ["hi", "HIght高"], "低": ["lw", "Low低"], "英": ["en", "ENglish英文"], "語": ["lan", "LANguage語言"], "教": ["eu", "EdUcate教育"], "學": ["sc", "SChool學校"], "通": ["ps", "PaSs通過"], "用": ["us", "USe用"], "可": ["ok", "OK可以"], "行": ["ac", "ACtion行動"]};
+const PUNCT = {"，":",","。":".","！":"!","？":"?","；":";","、":","};
+
+function parseSentence(raw) {
+  const chars=[], codes=[];
+  for(const ch of raw) {
+    if(PUNCT[ch]) { chars.push(ch); codes.push(PUNCT[ch]); }
+    else if(CODE_TABLE[ch]) { chars.push(ch); codes.push(CODE_TABLE[ch][0]); }
+  }
+  return {chars, codes, raw};
+}
+const SENTENCES = RAW_SENTENCES.map(parseSentence);
+
+// ── 鍵盤 ──
+const KB_ROWS = [
+  {offset:0,   keys:["1","2","3","4","5","6","7","8","9","0"]},
+  {offset:0.4, keys:["q","w","e","r","t","y","u","i","o","p"]},
+  {offset:0.7, keys:["a","s","d","f","g","h","j","k","l",";"]},
+  {offset:1.1, keys:["z","x","c","v","b","n","m",",",".","/"]}
+];
+const FJ = new Set(["f","j"]);
+
+let sentIdx=0, charIdx=0, inputBuf="";
+let blinkTimer=null, blinkKey=null, blinkOn=true;
+let targetKeys=new Set(), targetOrder={}, typedKeys=new Set(), nextBlinkKeys=[];
+const keyEls={};
+
+function buildKeyboard() {
+  const kb=document.getElementById("keyboard");
+  KB_ROWS.forEach(row => {
+    const rEl=document.createElement("div"); rEl.className="kb-row";
+    if(row.offset>0) { const s=document.createElement("div"); s.style.flex=row.offset.toFixed(1); rEl.appendChild(s); }
+    row.keys.forEach((key,ci) => {
+      if(ci===5) { const g=document.createElement("div"); g.style.flex="0.5"; rEl.appendChild(g); }
+      const el=document.createElement("div");
+      el.className="kb-key"+(FJ.has(key)?" fj-key":"");
+      el.dataset.key=key; el.textContent=key.toUpperCase();
+      el.addEventListener("click",()=>handleKey(key));
+      el.addEventListener("touchstart",e=>{e.preventDefault();handleKey(key);},{passive:false});
+      keyEls[key]=el; rEl.appendChild(el);
+    });
+    kb.appendChild(rEl);
+  });
+  const spRow=document.createElement("div"); spRow.className="kb-row";
+  const p1=document.createElement("div"); p1.style.flex="1.5"; spRow.appendChild(p1);
+  const spEl=document.createElement("div"); spEl.className="kb-key space-key"; spEl.textContent="SPACE";
+  spEl.addEventListener("click",()=>handleKey("space"));
+  spEl.addEventListener("touchstart",e=>{e.preventDefault();handleKey("space");},{passive:false});
+  keyEls["space"]=spEl; spRow.appendChild(spEl);
+  const p2=document.createElement("div"); p2.style.flex="1.5"; spRow.appendChild(p2);
+  kb.appendChild(spRow);
+}
+
+function setKeyState(key,state) {
+  if(!keyEls[key]) return;
+  const el=keyEls[key];
+  const isSpace=key==="space";
+  let cls="kb-key"+(FJ.has(key)?" fj-key":"")+(isSpace?" space-key":"");
+  if(state==="highlighted") cls+=" highlighted";
+  else if(state==="blinking-on") cls+=" blinking-on";
+  else if(state==="blinking-off") cls+=" blinking-off";
+  else if(state==="flashing") cls+=" flashing";
+  else if(state==="done") cls+=" done";
+  el.className=cls;
+}
+
+function setKeyNum(key,num) {
+  if(!keyEls[key]) return;
+  clearKeyNum(key);
+  const s=document.createElement("span"); s.className="key-num"; s.textContent=num;
+  keyEls[key].appendChild(s);
+}
+function clearKeyNum(key) {
+  if(!keyEls[key]) return;
+  const o=keyEls[key].querySelector(".key-num"); if(o) o.remove();
+}
+
+function stopBlink() {
+  if(blinkTimer) { clearInterval(blinkTimer); blinkTimer=null; }
+  if(blinkKey && keyEls[blinkKey]) setKeyState(blinkKey, targetKeys.has(blinkKey)?"highlighted":"normal");
+  blinkKey=null;
+}
+
+function startBlink(key) {
+  stopBlink(); blinkKey=key; blinkOn=true;
+  blinkTimer=setInterval(()=>{
+    blinkOn=!blinkOn;
+    setKeyState(key, blinkOn?"blinking-on":"blinking-off");
+    if(blinkOn && targetOrder[key]!==undefined) setKeyNum(key,targetOrder[key]);
+    else clearKeyNum(key);
+  },350);
+}
+
+function clearAllHighlights() {
+  stopBlink();
+  Object.keys(keyEls).forEach(k=>{ setKeyState(k,"normal"); clearKeyNum(k); });
+  targetKeys=new Set(); targetOrder={}; typedKeys=new Set(); nextBlinkKeys=[];
+}
+
+function highlightTargets(code) {
+  clearAllHighlights();
+  const keys=[];
+  [...code.toLowerCase()].forEach((ch,i)=>{
+    const k=ch===" "?"space":ch;
+    if(!targetKeys.has(k)) keys.push(k);
+    targetKeys.add(k); targetOrder[k]=i+1;
+    setKeyState(k,"highlighted"); setKeyNum(k,i+1);
+  });
+  nextBlinkKeys=keys;
+  if(keys.length>0) startBlink(keys[0]);
+}
+
+function flashKey(key,callback) {
+  stopBlink(); typedKeys.add(key); clearKeyNum(key);
+  setKeyState(key,"flashing");
+  setTimeout(()=>{
+    setKeyState(key,"done");
+    const next=nextBlinkKeys.find(k=>!typedKeys.has(k)&&targetKeys.has(k));
+    if(next) startBlink(next);
+    if(callback) callback();
+  },180);
+}
+
+function drawRows() {
+  const {chars,codes}=SENTENCES[sentIdx];
+  ["row1","row2","row3","row4"].forEach(id=>document.getElementById(id).innerHTML="");
+  chars.forEach((ch,i)=>{
+    const code=codes[i];
+    const mkCell=(id,txt,style)=>{
+      const c=document.createElement("div");
+      c.className="cell"+(id==="row3"&&i===charIdx?" active-code":"");
+      c.style.minWidth="2.8em"; if(style) c.style.cssText+=style;
+      c.textContent=txt; document.getElementById(id).appendChild(c);
+    };
+    mkCell("row1",ch);
+    mkCell("row2",i<charIdx?ch:"");
+    mkCell("row3",code, i<charIdx?"color:var(--tip)":"");
+    mkCell("row4",i===charIdx?"↑":" ");
+  });
+}
+
+function drawInp() {
+  const {codes}=SENTENCES[sentIdx];
+  const inp=document.getElementById("inp-row"); inp.innerHTML="";
+  codes.forEach((code,i)=>{
+    const c=document.createElement("div");
+    c.className="inp-cell"+(i===charIdx?" current":"");
+    c.style.minWidth="2.8em";
+    c.textContent=i<charIdx?code+"_":i===charIdx?inputBuf+"_":"";
+    inp.appendChild(c);
+  });
+}
+
+function setMsg(txt,type) {
+  const el=document.getElementById("msg"); el.textContent=txt;
+  el.style.color=type==="ok"?"var(--ok)":type==="err"?"var(--err)":"var(--tip)";
+}
+
+function showExplanation() {
+  const {chars,codes}=SENTENCES[sentIdx];
+  const body=document.getElementById("exp-body"); body.innerHTML="";
+  const seen=new Set();
+  chars.forEach((ch,i)=>{
+    const code=codes[i]; if(seen.has(code)) return; seen.add(code);
+    const info=CODE_TABLE[ch];
+    const desc=info?info[1]:"標點";
+    const d=document.createElement("div");
+    d.textContent=`  ${code.padEnd(6)} ${ch}  ${desc}`;
+    body.appendChild(d);
+  });
+  document.getElementById("exp").style.display="block";
+}
+
+function handleKey(key) {
+  const {chars,codes}=SENTENCES[sentIdx];
+  if(charIdx>=chars.length) { loadSentence(); return; }
+  if(key==="space") { confirmInput(); return; }
+  inputBuf+=key.toLowerCase(); drawInp();
+  flashKey(key.toLowerCase(),()=>{
+    const target=codes[charIdx]||"";
+    if(inputBuf.toLowerCase()===target.toLowerCase()) startBlink("space");
+  });
+}
+
+function confirmInput() {
+  const {chars,codes}=SENTENCES[sentIdx];
+  const target=codes[charIdx]||"";
+  if(inputBuf.trim().toLowerCase()===target.toLowerCase()) {
+    stopBlink(); charIdx++; inputBuf="";
+    drawRows(); drawInp();
+    if(charIdx>=chars.length) {
+      clearAllHighlights();
+      setMsg("✓  完成！任意鍵=重打　F1=下一句","ok");
+      showExplanation();
+    } else {
+      setMsg(`✓  正確！下一個：${codes[charIdx]}`,"ok");
+      highlightTargets(codes[charIdx]);
+    }
+  } else {
+    setMsg(`✗  應輸入：${target}　你輸入：${inputBuf}`,"err");
+    inputBuf=""; drawInp();
+  }
+}
+
+function loadSentence() {
+  charIdx=0; inputBuf="";
+  clearAllHighlights();
+  document.getElementById("exp").style.display="none";
+  setMsg("","");
+  drawRows(); drawInp();
+  document.getElementById("sent-label").textContent=
+    `句${sentIdx+1}/${SENTENCES.length}  F1=下一句`;
+  const {codes}=SENTENCES[sentIdx];
+  if(codes.length>0) highlightTargets(codes[0]);
+}
+
+document.addEventListener("keydown",e=>{
+  if(e.key==="F1"){e.preventDefault();sentIdx=(sentIdx+1)%SENTENCES.length;loadSentence();return;}
+  if(e.key==="Backspace"){inputBuf=inputBuf.slice(0,-1);drawInp();return;}
+  if(e.key===" "||e.key==="Enter"){e.preventDefault();confirmInput();return;}
+  if(e.key.length===1&&/[a-zA-Z0-9,;./]/.test(e.key)) handleKey(e.key.toLowerCase());
+});
+
+buildKeyboard();
+loadSentence();
+</script>
+</body>
+</html>
