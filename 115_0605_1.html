@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#000000">
+<title>簡英出字</title>
+<style>
+  :root {
+    --bg:#000; --cn:#00FFFF; --en:#FFFF00; --ok:#00FF00;
+    --err:#FF4444; --tip:#888; --red:#CC2200; --exp:#AAFFAA;
+    --kb-bg:#2a2a2a; --kb-fg:#fff; --kb-hi:#FFFF00;
+    --kb-hi-fg:#000; --kb-done:#444; --kb-border:#555;
+    --blue:#0055FF;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{background:var(--bg);color:var(--cn);font-family:'Courier New',monospace;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+  #app{display:flex;flex-direction:column;height:100vh;padding:4px 8px;gap:2px;justify-content:space-between;}
+  #title{display:flex;justify-content:space-between;align-items:center;color:var(--cn);font-size:clamp(12px,4vw,18px);font-weight:bold;flex-shrink:0;}
+  #title-ver{color:var(--tip);font-size:clamp(10px,3.5vw,15px);}
+  #rows{flex-shrink:0;font-size:clamp(16px,5.5vw,30px);line-height:1.5;}
+  .row{display:flex;flex-wrap:nowrap;min-height:1.4em;}
+  .cell{display:inline-flex;align-items:center;min-width:2.5em;padding:0 2px;}
+  #row1 .cell{color:var(--cn);}
+  #row2 .cell{color:var(--ok);}
+  #row3 .cell{color:var(--en);font-size:.8em;}
+  #row4 .cell{color:var(--en);font-size:.8em;}
+  .cell.active-code{border:2px solid var(--en);border-radius:3px;}
+  #inp-row{display:flex;flex-wrap:nowrap;background:#111;padding:4px 6px;border-radius:4px;min-height:1.6em;font-size:clamp(14px,5vw,26px);flex-shrink:0;}
+  .inp-cell{min-width:2.5em;color:var(--tip);padding:0 2px;}
+  .inp-cell.current{color:#fff;border:2px solid var(--en);border-radius:3px;background:#001133;}
+  #msg{font-size:clamp(13px,4.5vw,22px);min-height:1.2em;flex-shrink:0;}
+  #exp{font-size:clamp(12px,4vw,20px);color:var(--exp);flex-shrink:0;display:none;overflow:hidden;}
+  #exp-line{border-top:3px solid var(--red);margin:2px 0;}
+  #exp-title{color:var(--tip);margin-bottom:1px;}
+  #keyboard{flex-shrink:0;display:flex;flex-direction:column;gap:1.5vw;padding:0 0 3px;}
+  .kb-row{display:flex;gap:1.5vw;width:100%;}
+  .kb-key{flex:1;min-width:0;background:var(--kb-bg);color:var(--kb-fg);border:1px solid var(--kb-border);border-radius:6px;font-family:'Courier New',monospace;font-size:clamp(13px,4.5vw,22px);font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative;height:8vh;user-select:none;-webkit-user-select:none;transition:background .05s;}
+  .kb-key.space-key{flex:5;height:8vh;}
+  .kb-key.next-key{background:#1a3a1a;color:#00FF00;border-color:#00FF00;font-size:clamp(16px,5vw,26px);}
+  .kb-key.fj-key::after{content:'';position:absolute;bottom:3px;left:20%;width:60%;height:2px;background:var(--en);border-radius:1px;}
+  .kb-key.highlighted{background:var(--kb-hi);color:var(--kb-hi-fg);border:2px solid var(--blue);}
+  .kb-key.blinking-on{background:var(--kb-hi);color:var(--kb-hi-fg);border:2px solid var(--blue);}
+  .kb-key.blinking-off{background:#000033;color:var(--en);border:2px solid var(--blue);}
+  .kb-key.flashing{background:var(--red);color:#fff;border:2px solid var(--red);}
+  .kb-key.done{background:var(--kb-done);color:#888;border-color:#666;}
+  .key-num{position:absolute;bottom:3px;right:4px;font-size:.75em;color:var(--red);font-weight:bold;line-height:1;}
+  #bottom{display:flex;justify-content:space-between;font-size:clamp(10px,3.5vw,14px);color:var(--tip);flex-shrink:0;padding:1px 0;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="title">
+    <span id="title-ver"></span>
+    <span>簡英出字</span>
+  </div>
+  <div id="rows">
+    <div class="row" id="row1"></div>
+    <div class="row" id="row2"></div>
+    <div class="row" id="row3"></div>
+    <div class="row" id="row4"></div>
+  </div>
+  <div id="inp-row"></div>
+  <div id="msg"></div>
+  <div id="exp">
+    <div id="exp-line"></div>
+    <div id="exp-title">─ 碼表說明 ─</div>
+    <div id="exp-body"></div>
+  </div>
+  <div id="keyboard"></div>
+  <div id="bottom">
+    <span id="sent-label"></span>
+    <span id="ver"></span>
+  </div>
+</div>
+<script>
+const RAW_SENTENCES = ["黄榆静，生日快乐", "听说读写；终生有梦", "你我他，心想事成", "上下左右。开关高低", "英语教学，通用可行"];
+const CODE_TABLE    = {"；": [";", "分号"], "，": [",", "豆号号"], "。": [".", "句号号"], "黄": ["yel", "YELoow"], "俊": ["yvx", "外星人Y+V型+X型"], "卿": ["vdp", "V型+日Day+P型"], "钦": ["kow", "K金+欠OWn"], "萧": ["01y", "十0+一1+片y"], "子": ["so", "SOn子"], "勋": ["w4p", "熏w4+力Power"], "咏": ["a,w", "言lA+永,W"], "翰": ["0y;", "十0+人y+；"], "苏": ["0it", "十0+鱼fI+木t"], "鼎": ["enn", "目Ey+片y+片y"], "元": ["2r", "二2+R型"], "傅": ["y0i", "人y+十0+寸inch"], "达": ["zl", "Z型+土L"], "贵": ["b8", "虫B+八8"], "柯": ["tok", "木t+可ok"], "聪": ["e,h", "耳e+，+心h"], "辉": ["bnc", "光b+n型+车c"], "爱": ["lv", "LoVe爱"], "妳": ["gu", "女生G的妳U_GU"], "张": ["ul", "u型弓+Ln长"], "志": ["lh", "土L+心Heart"], "安": ["cg", "C型+女Girl"], "琪": ["58", "王5型+八型"], "淑": ["3un", "三点水3+叔UNc"], "琼": ["5vx", "王5+Vv+Xx"], "徐": ["vat", "很v+Aa+木t"], "源": ["3s", "三点水3+小s"], "宏": ["cxv", "Cc+Xx+Vv"], "潘": ["3m4", "三点水3+月M+田4"], "荣": ["fnt", "火F+Nn+木t"], "想": ["th", "THink想"], "事": ["ma", "MAtter「事」情"], "成": ["ad", "ADult「成」人"], "林": ["tt", "双木林，木t+木t"], "天": ["sk", "SKy天"], "生": ["lf", "LiFe生活的生"], "廖": ["v53", "V型+羽5型+三3型"], "仕": ["ylz", "人Y + Lz(土L之错体)"], "强": ["ub", "U型弓+虫B"], "涵": ["3vw", "三点水3+V型+水w"], "王": ["ki", "KIng"], "兰": ["0dt", "十0+门Door+木t"], "花": ["fw", "FoWelly"], "亚": ["as", "ASia亚洲"], "龙": ["il", "立i+L型"], "玉": ["5.", "王5+点."], "敏": ["evx", "每EVey+x型"], "榆": ["tak", "木t+A型+刀k"], "静": ["1mj", "1型+月m+J型"], "心": ["hea", "HEArt"], "你": ["u", "yoU你"], "我": ["i", "I我"], "他": ["he", "HE他"], "日": ["d", "Day日"], "快": ["fs", "FaSt快"], "乐": ["mu", "MUsic音乐的乐"], "听": ["ls", "LiSten听"], "说": ["sa", "SAy说"], "读": ["rea", "REAd读"], "写": ["wr", "WRite写"], "终": ["end", "END终"], "有": ["v", "haVe有"], "梦": ["dre", "DREam梦"], "上": ["up", "up上"], "下": ["dn", "DowN下"], "左": ["le", "LEft左"], "右": ["ri", "RIght右"], "开": ["on", "ON开"], "关": ["of", "OFf关"], "高": ["hi", "HIght高"], "低": ["lw", "Low低"], "英": ["en", "ENglish英文"], "语": ["lan", "LANguage语言"], "教": ["eu", "EdUcate教育"], "学": ["sc", "SChool学校"], "通": ["ps", "PaSs通过"], "用": ["us", "USe用"], "可": ["ok", "OK可以"], "行": ["ac", "ACtion行动"]};
+const PUNCT = {"，":",","。":".","！":"!","？":"?","；":";","、":","};
+
+function parseSentence(raw) {
+  const chars=[], codes=[];
+  for(const ch of raw) {
+    if(PUNCT[ch]) { chars.push(ch); codes.push(PUNCT[ch]); }
+    else if(CODE_TABLE[ch]) { chars.push(ch); codes.push(CODE_TABLE[ch][0]); }
+  }
+  return {chars, codes, raw};
+}
+const SENTENCES = RAW_SENTENCES.map(parseSentence);
+
+// 版本號：月日_時分
+(function(){
+  const n=new Date();
+  const mm=String(n.getMonth()+1).padStart(2,'0');
+  const dd=String(n.getDate()).padStart(2,'0');
+  const hh=String(n.getHours()).padStart(2,'0');
+  const mi=String(n.getMinutes()).padStart(2,'0');
+  const ver=mm+dd+'_'+hh+mi;
+  document.getElementById('title-ver').textContent=ver;
+  document.getElementById('ver').textContent=ver;
+})();
+
+// 41鍵鍵盤
+const KB_ROWS = [
+  {offset:0,   keys:["1","2","3","4","5","6","7","8","9","0","-"]},
+  {offset:0.3, keys:["q","w","e","r","t","y","u","i","o","p"]},
+  {offset:0.6, keys:["a","s","d","f","g","h","j","k","l",";"]},
+  {offset:1.0, keys:["z","x","c","v","b","n","m",",",".","/"]}
+];
+const FJ = new Set(["f","j"]);
+
+let sentIdx=0, charIdx=0, inputBuf="";
+let blinkTimer=null, blinkKey=null, blinkOn=true;
+let targetKeys=new Set(), targetOrder={}, typedKeys=new Set(), nextBlinkKeys=[];
+const keyEls={};
+
+function buildKeyboard() {
+  const kb=document.getElementById("keyboard");
+  KB_ROWS.forEach(row => {
+    const rEl=document.createElement("div"); rEl.className="kb-row";
+    if(row.offset>0) { const s=document.createElement("div"); s.style.flex=row.offset.toFixed(1); rEl.appendChild(s); }
+    row.keys.forEach((key,ci) => {
+      if(ci===5 && row.keys.length<=10) { const g=document.createElement("div"); g.style.flex="0.2"; rEl.appendChild(g); }
+      const el=document.createElement("div");
+      el.className="kb-key"+(FJ.has(key)?" fj-key":"")+(key==="-"?" next-key":"");
+      el.dataset.key=key;
+      el.textContent=key==="-"?"▶":key.toUpperCase();
+      el.addEventListener("click",()=>handleKey(key));
+      el.addEventListener("touchstart",e=>{e.preventDefault();handleKey(key);},{passive:false});
+      keyEls[key]=el; rEl.appendChild(el);
+    });
+    kb.appendChild(rEl);
+  });
+  const spRow=document.createElement("div"); spRow.className="kb-row";
+  const p1=document.createElement("div"); p1.style.flex="1.5"; spRow.appendChild(p1);
+  const spEl=document.createElement("div"); spEl.className="kb-key space-key"; spEl.textContent="SPACE";
+  spEl.addEventListener("click",()=>handleKey("space"));
+  spEl.addEventListener("touchstart",e=>{e.preventDefault();handleKey("space");},{passive:false});
+  keyEls["space"]=spEl; spRow.appendChild(spEl);
+  const p2=document.createElement("div"); p2.style.flex="1.5"; spRow.appendChild(p2);
+  kb.appendChild(spRow);
+}
+
+function setKeyState(key,state) {
+  if(!keyEls[key]) return;
+  const el=keyEls[key];
+  const isSpace=key==="space";
+  const isNext=key==="-";
+  let cls="kb-key"+(FJ.has(key)?" fj-key":"")+(isSpace?" space-key":"")+(isNext?" next-key":"");
+  if(state==="highlighted") cls+=" highlighted";
+  else if(state==="blinking-on") cls+=" blinking-on";
+  else if(state==="blinking-off") cls+=" blinking-off";
+  else if(state==="flashing") cls+=" flashing";
+  else if(state==="done") cls+=" done";
+  el.className=cls;
+}
+
+function setKeyNum(key,num) {
+  if(!keyEls[key]) return;
+  clearKeyNum(key);
+  const s=document.createElement("span"); s.className="key-num"; s.textContent=num;
+  keyEls[key].appendChild(s);
+}
+function clearKeyNum(key) {
+  if(!keyEls[key]) return;
+  const o=keyEls[key].querySelector(".key-num"); if(o) o.remove();
+}
+
+function stopBlink() {
+  if(blinkTimer) { clearInterval(blinkTimer); blinkTimer=null; }
+  if(blinkKey && keyEls[blinkKey]) setKeyState(blinkKey, targetKeys.has(blinkKey)?"highlighted":"normal");
+  blinkKey=null;
+}
+
+function startBlink(key) {
+  stopBlink(); blinkKey=key; blinkOn=true;
+  blinkTimer=setInterval(()=>{
+    blinkOn=!blinkOn;
+    setKeyState(key, blinkOn?"blinking-on":"blinking-off");
+    if(blinkOn && targetOrder[key]!==undefined) setKeyNum(key,targetOrder[key]);
+    else clearKeyNum(key);
+  },350);
+}
+
+function clearAllHighlights() {
+  stopBlink();
+  Object.keys(keyEls).forEach(k=>{ setKeyState(k,"normal"); clearKeyNum(k); });
+  targetKeys=new Set(); targetOrder={}; typedKeys=new Set(); nextBlinkKeys=[];
+}
+
+function highlightTargets(code) {
+  clearAllHighlights();
+  const keys=[];
+  [...code.toLowerCase()].forEach((ch,i)=>{
+    const k=ch===" "?"space":ch;
+    if(!targetKeys.has(k)) keys.push(k);
+    targetKeys.add(k); targetOrder[k]=i+1;
+    setKeyState(k,"highlighted"); setKeyNum(k,i+1);
+  });
+  nextBlinkKeys=keys;
+  if(keys.length>0) startBlink(keys[0]);
+}
+
+function flashKey(key,callback) {
+  stopBlink(); typedKeys.add(key); clearKeyNum(key);
+  setKeyState(key,"flashing");
+  setTimeout(()=>{
+    setKeyState(key,"done");
+    const next=nextBlinkKeys.find(k=>!typedKeys.has(k)&&targetKeys.has(k));
+    if(next) startBlink(next);
+    if(callback) callback();
+  },180);
+}
+
+function drawRows() {
+  const {chars,codes}=SENTENCES[sentIdx];
+  ["row1","row2","row3","row4"].forEach(id=>document.getElementById(id).innerHTML="");
+  chars.forEach((ch,i)=>{
+    const code=codes[i];
+    const mkCell=(id,txt,style)=>{
+      const c=document.createElement("div");
+      c.className="cell"+(id==="row3"&&i===charIdx?" active-code":"");
+      c.style.minWidth="2.5em"; if(style) c.style.cssText+=style;
+      c.textContent=txt; document.getElementById(id).appendChild(c);
+    };
+    mkCell("row1",ch);
+    mkCell("row2",i<charIdx?ch:"");
+    mkCell("row3",code, i<charIdx?"color:var(--tip)":"");
+    mkCell("row4",i===charIdx?"↑":" ");
+  });
+}
+
+function drawInp() {
+  const {codes}=SENTENCES[sentIdx];
+  const inp=document.getElementById("inp-row"); inp.innerHTML="";
+  codes.forEach((code,i)=>{
+    const c=document.createElement("div");
+    c.className="inp-cell"+(i===charIdx?" current":"");
+    c.style.minWidth="2.5em";
+    c.textContent=i<charIdx?code+"_":i===charIdx?inputBuf+"_":"";
+    inp.appendChild(c);
+  });
+}
+
+function setMsg(txt,type) {
+  const el=document.getElementById("msg"); el.textContent=txt;
+  el.style.color=type==="ok"?"var(--ok)":type==="err"?"var(--err)":"var(--tip)";
+}
+
+function showExplanation() {
+  const {chars,codes}=SENTENCES[sentIdx];
+  const body=document.getElementById("exp-body"); body.innerHTML="";
+  const seen=new Set();
+  chars.forEach((ch,i)=>{
+    const code=codes[i]; if(seen.has(code)) return; seen.add(code);
+    const info=CODE_TABLE[ch];
+    const desc=info?info[1]:"標點";
+    const d=document.createElement("div");
+    d.textContent=`  ${code.padEnd(6)} ${ch}  ${desc}`;
+    body.appendChild(d);
+  });
+  document.getElementById("exp").style.display="block";
+}
+
+function handleKey(key) {
+  if(key==="-") { sentIdx=(sentIdx+1)%SENTENCES.length; loadSentence(); return; }
+  const {chars,codes}=SENTENCES[sentIdx];
+  if(charIdx>=chars.length) { loadSentence(); return; }
+  if(key==="space") { confirmInput(); return; }
+  inputBuf+=key.toLowerCase(); drawInp();
+  flashKey(key.toLowerCase(),()=>{
+    const target=codes[charIdx]||"";
+    if(inputBuf.toLowerCase()===target.toLowerCase()) startBlink("space");
+  });
+}
+
+function confirmInput() {
+  const {chars,codes}=SENTENCES[sentIdx];
+  const target=codes[charIdx]||"";
+  if(inputBuf.trim().toLowerCase()===target.toLowerCase()) {
+    stopBlink(); charIdx++; inputBuf="";
+    drawRows(); drawInp();
+    if(charIdx>=chars.length) {
+      clearAllHighlights();
+      setMsg("✓  完成！任意鍵=重打　▶=下一句","ok");
+      showExplanation();
+    } else {
+      setMsg(`✓  正確！下一個：${codes[charIdx]}`,"ok");
+      highlightTargets(codes[charIdx]);
+    }
+  } else {
+    setMsg(`✗  應輸入：${target}　你輸入：${inputBuf}`,"err");
+    inputBuf=""; drawInp();
+  }
+}
+
+function loadSentence() {
+  charIdx=0; inputBuf="";
+  clearAllHighlights();
+  document.getElementById("exp").style.display="none";
+  setMsg("","");
+  drawRows(); drawInp();
+  document.getElementById("sent-label").textContent=
+    `句${sentIdx+1}/${SENTENCES.length}  ▶=下一句`;
+  const {codes}=SENTENCES[sentIdx];
+  if(codes.length>0) highlightTargets(codes[0]);
+}
+
+document.addEventListener("keydown",e=>{
+  if(e.key==="F1"||e.key==="-"){e.preventDefault();sentIdx=(sentIdx+1)%SENTENCES.length;loadSentence();return;}
+  if(e.key==="Backspace"){inputBuf=inputBuf.slice(0,-1);drawInp();return;}
+  if(e.key===" "||e.key==="Enter"){e.preventDefault();confirmInput();return;}
+  if(e.key.length===1&&/[a-zA-Z0-9,;./]/.test(e.key)) handleKey(e.key.toLowerCase());
+});
+
+buildKeyboard();
+loadSentence();
+</script>
+</body>
+</html>
